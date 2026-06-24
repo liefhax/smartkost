@@ -1,373 +1,358 @@
-import { useState } from "react";
-import { useDashboard } from "../context/DashboardContext";
-import ScheduleControl from "../components/config/ScheduleControl";
-import { Settings, Cpu, Save, Wifi, Server, Shield, Bell, BellOff } from "lucide-react";
-import { requestNotificationPermission, getNotificationPermission } from '../services/notificationService';
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { useDashboard } from '../context/DashboardContext';
+import {
+  Wind, Thermometer, Droplets, Zap, Bell, Cpu,
+  DollarSign, Home, Save, RotateCcw, Wifi, Server
+} from 'lucide-react';
 
-function Toggle({ enabled, onChange, size = "md" }) {
-  const dimensions = size === "sm" ? "w-10 h-6" : "w-12 h-7";
-  const knob = size === "sm" ? "w-4 h-4" : "w-5 h-5";
-  const translate = enabled ? (size === "sm" ? "translate-x-4" : "translate-x-5") : "translate-x-0";
+const fadeUp = {
+  hidden: { opacity: 0, y: 12 },
+  show: (i) => ({
+    opacity: 1, y: 0,
+    transition: { delay: i * 0.06, type: 'spring', stiffness: 280, damping: 28 },
+  }),
+};
 
+function SectionHeader({ title, icon: Icon, color }) {
+  const colorMap = {
+    blue: 'bg-blue-500/10 text-blue-500',
+    emerald: 'bg-emerald-500/10 text-emerald-500',
+    purple: 'bg-purple-500/10 text-purple-500',
+    orange: 'bg-orange-500/10 text-orange-500',
+    red: 'bg-red-500/10 text-red-500',
+  };
   return (
-    <button
-      type="button"
-      onClick={onChange}
-      className={`relative inline-flex ${dimensions} items-center rounded-full transition-colors ${enabled ? "bg-blue-500" : "bg-slate-300 dark:bg-slate-600"}`}
-      aria-pressed={enabled}
-    >
-      <span
-        className={`inline-block ${knob} transform rounded-full bg-white transition-transform ${translate}`}
+    <div className="flex items-center gap-2 mb-2">
+      <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${colorMap[color] || colorMap.blue}`}>
+        <Icon size={12} />
+      </div>
+      <h3 className="text-sm font-bold text-slate-900 dark:text-white">{title}</h3>
+    </div>
+  );
+}
+
+function SliderSetting({ label, value, min, max, unit, step = 1, onChange }) {
+  const pct = ((value - min) / (max - min)) * 100;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-slate-500">{label}</span>
+        <span className="text-xs font-semibold text-slate-900 dark:text-white font-mono">{value}{unit}</span>
+      </div>
+      <input
+        type="range"
+        min={min} max={max} step={step}
+        value={value}
+        onChange={e => onChange(parseFloat(e.target.value))}
+        className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-cyan-500"
+        style={{ background: `linear-gradient(to right, #06b6d4 ${pct}%, #e2e8f0 ${pct}%)` }}
       />
-    </button>
+      <div className="flex justify-between">
+        <span className="text-[9px] text-slate-400">{min}{unit}</span>
+        <span className="text-[9px] text-slate-400">{max}{unit}</span>
+      </div>
+    </div>
+  );
+}
+
+function ToggleSetting({ label, description, checked, onChange }) {
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-b-0">
+      <div>
+        <div className="text-xs font-medium text-slate-700 dark:text-slate-300">{label}</div>
+        {description && <div className="text-[10px] text-slate-400 mt-0.5">{description}</div>}
+      </div>
+      <button
+        onClick={() => onChange(!checked)}
+        className={`relative w-10 h-5 rounded-full transition-all active:scale-95 flex-shrink-0 ${
+          checked ? 'bg-gradient-to-r from-cyan-500 to-blue-500' : 'bg-slate-300 dark:bg-slate-600'
+        }`}
+      >
+        <motion.div
+          animate={{ x: checked ? 20 : 2 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+          className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md"
+        />
+      </button>
+    </div>
   );
 }
 
 export default function SettingsPage() {
   const { state, actions } = useDashboard();
   const { settings, mqttStatus } = state;
+  const [saved, setSaved] = useState(false);
+
   const [localSettings, setLocalSettings] = useState({
     overloadLimit: settings.overloadLimit,
     targetSuhu: settings.targetSuhu,
     tarifPerKwh: settings.tarifPerKwh,
+    gasThreshold: settings.gasThreshold,
   });
 
-  const handleSave = (key, value) => {
-    actions.updateSetting(key, value);
-    actions.addNotification({
-      type: "success",
-      title: "Settings Saved",
-      message: `${key} updated successfully`,
+  const handleSave = () => {
+    Object.keys(localSettings).forEach(key => {
+      actions.updateSetting(key, localSettings[key]);
     });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleReset = () => {
+    const defaults = { overloadLimit: 500, targetSuhu: 26, tarifPerKwh: 1444.70, gasThreshold: 500 };
+    setLocalSettings(defaults);
+    Object.keys(defaults).forEach(key => actions.updateSetting(key, defaults[key]));
   };
 
   return (
-    <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-          Settings
-        </h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          System configuration & preferences
-        </p>
-      </div>
+    <motion.div
+      initial="hidden"
+      animate="show"
+      variants={{ show: { transition: { staggerChildren: 0.05 } } }}
+      className="p-4 lg:p-6 pb-24 lg:pb-6 flex flex-col gap-4 w-full"
+    >
+      {/* Header */}
+      <motion.div custom={0} variants={fadeUp}>
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Pengaturan</h2>
+        <p className="text-xs text-slate-500 mt-1">Konfigurasi sensor & sistem</p>
+      </motion.div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 lg:gap-6">
-        {/* Configuration */}
-        <div className="xl:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 hover:shadow-xl transition-all">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="p-2 bg-purple-50 dark:bg-purple-500/10 rounded-lg">
-              <Settings className="w-5 h-5 text-purple-500" />
+      {/* System Info */}
+      <motion.div custom={1} variants={fadeUp}>
+        <SectionHeader title="Informasi Sistem" icon={Server} color="blue" />
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="text-[10px] text-slate-400">MQTT Status</div>
+              <div className={`text-xs font-semibold ${mqttStatus === 'connected' ? 'text-emerald-500' : 'text-red-500'}`}>
+                {mqttStatus === 'connected' ? 'Terhubung' : 'Terputus'}
+              </div>
             </div>
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-              Configuration
-            </h3>
+            <div>
+              <div className="text-[10px] text-slate-400">Firmware</div>
+              <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 font-mono">v1.0.0</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-slate-400">Perangkat</div>
+              <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 font-mono">ESP32-001</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-slate-400">Broker</div>
+              <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">HiveMQ Cloud</div>
+            </div>
           </div>
-
-          <div className="space-y-5">
-            {/* Overload Limit */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 block">
-                Overload Protection (Watt)
-              </label>
-              <p className="text-xs text-slate-500 mb-3">
-                System will alert when power exceeds this limit
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={localSettings.overloadLimit}
-                  onChange={(e) =>
-                    setLocalSettings({
-                      ...localSettings,
-                      overloadLimit: e.target.value,
-                    })
-                  }
-                  className="flex-1 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500/50 outline-none"
-                />
-                <button
-                  onClick={() =>
-                    handleSave("overloadLimit", localSettings.overloadLimit)
-                  }
-                  className="px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-sm font-medium rounded-xl hover:shadow-lg hover:shadow-cyan-500/25 transition-all active:scale-95 flex items-center gap-2"
-                >
-                  <Save className="w-4 h-4" />
-                  Save
-                </button>
-              </div>
-            </div>
-
-            {/* Target Temperature */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 block">
-                Auto Fan Temperature (°C)
-              </label>
-              <p className="text-xs text-slate-500 mb-3">
-                Fan will auto-activate above this temperature
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={localSettings.targetSuhu}
-                  onChange={(e) =>
-                    setLocalSettings({
-                      ...localSettings,
-                      targetSuhu: e.target.value,
-                    })
-                  }
-                  className="flex-1 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500/50 outline-none"
-                />
-                <button
-                  onClick={() =>
-                    handleSave("targetSuhu", localSettings.targetSuhu)
-                  }
-                  className="px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-sm font-medium rounded-xl hover:shadow-lg hover:shadow-cyan-500/25 transition-all active:scale-95 flex items-center gap-2"
-                >
-                  <Save className="w-4 h-4" />
-                  Save
-                </button>
-              </div>
-            </div>
-
-            {/* Tariff */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 block">
-                Electricity Tariff (Rp/kWh)
-              </label>
-              <p className="text-xs text-slate-500 mb-3">
-                Used for cost calculation
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={localSettings.tarifPerKwh}
-                  onChange={(e) =>
-                    setLocalSettings({
-                      ...localSettings,
-                      tarifPerKwh: e.target.value,
-                    })
-                  }
-                  className="flex-1 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500/50 outline-none"
-                />
-                <button
-                  onClick={() =>
-                    handleSave("tarifPerKwh", localSettings.tarifPerKwh)
-                  }
-                  className="px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-sm font-medium rounded-xl hover:shadow-lg hover:shadow-cyan-500/25 transition-all active:scale-95 flex items-center gap-2"
-                >
-                  <Save className="w-4 h-4" />
-                  Save
-                </button>
-              </div>
-            </div>
-
-            {/* Gas Threshold - Tambahin ini */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 block">
-                Gas Alert Threshold (Analog Value)
-              </label>
-              <p className="text-xs text-slate-500 mb-3">
-                Alert when MQ-2 sensor value exceeds this threshold
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={localSettings.gasThreshold || 500}
-                  onChange={(e) =>
-                    setLocalSettings({
-                      ...localSettings,
-                      gasThreshold: e.target.value,
-                    })
-                  }
-                  className="flex-1 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500/50 outline-none"
-                />
-                <button
-                  onClick={() =>
-                    handleSave("gasThreshold", localSettings.gasThreshold)
-                  }
-                  className="px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-sm font-medium rounded-xl hover:shadow-lg hover:shadow-cyan-500/25 transition-all active:scale-95 flex items-center gap-2"
-                >
-                  <Save className="w-4 h-4" />
-                  Save
-                </button>
-              </div>
-            </div>
-
-            {/* Notification Settings - Tambahin setelah Configuration */}
-<div className="xl:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 hover:shadow-xl transition-all">
-  <div className="flex items-center gap-2 mb-6">
-    <div className="p-2 bg-blue-50 dark:bg-blue-500/10 rounded-lg">
-      <Bell className="w-5 h-5 text-blue-500" />
-    </div>
-    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Notification Settings</h3>
-  </div>
-
-  <div className="space-y-4">
-    {/* Browser Notification Permission */}
-    <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Browser Notifications</p>
-          <p className="text-xs text-slate-500">
-            {getNotificationPermission() === 'granted' 
-              ? 'Notifications are enabled' 
-              : 'Click to enable browser notifications'}
-          </p>
         </div>
+      </motion.div>
+
+      {/* Tariff */}
+      <motion.div custom={2} variants={fadeUp}>
+        <SectionHeader title="Tarif Listrik" icon={DollarSign} color="emerald" />
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+          <label className="text-[11px] text-slate-500 block mb-1">Harga per kWh (Rupiah)</label>
+          <input
+            type="number"
+            value={localSettings.tarifPerKwh}
+            onChange={e => setLocalSettings({ ...localSettings, tarifPerKwh: parseFloat(e.target.value) || 0 })}
+            className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-cyan-500/50"
+            min="0" step="0.01"
+          />
+          <div className="mt-2 px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+            <span className="text-[11px] text-slate-500">
+              Saat ini: <span className="font-semibold text-slate-900 dark:text-white">Rp {settings.tarifPerKwh.toLocaleString('id-ID')}/kWh</span>
+            </span>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Overload Limit */}
+      <motion.div custom={3} variants={fadeUp}>
+        <SectionHeader title="Proteksi Daya (PZEM-004T)" icon={Zap} color="red" />
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+          <SliderSetting
+            label="Batas Daya Maksimum"
+            value={localSettings.overloadLimit}
+            min={200} max={2200} unit=" W" step={50}
+            onChange={v => setLocalSettings({ ...localSettings, overloadLimit: v })}
+          />
+          <div className="flex gap-2 mt-3">
+            {[450, 900, 1300].map(v => (
+              <button key={v}
+                onClick={() => setLocalSettings({ ...localSettings, overloadLimit: v })}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 ${
+                  localSettings.overloadLimit === v
+                    ? 'bg-red-500/10 border border-red-500/30 text-red-500'
+                    : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500'
+                }`}
+              >
+                {v}W
+              </button>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Gas Threshold */}
+      <motion.div custom={4} variants={fadeUp}>
+        <SectionHeader title="Sensor Gas (MQ-2)" icon={Wind} color="purple" />
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+          <SliderSetting
+            label="Batas Bahaya"
+            value={localSettings.gasThreshold}
+            min={100} max={1000} unit=" ppm" step={10}
+            onChange={v => setLocalSettings({ ...localSettings, gasThreshold: v })}
+          />
+          <div className="flex gap-2 mt-3">
+            {[200, 300, 500].map(v => (
+              <button key={v}
+                onClick={() => setLocalSettings({ ...localSettings, gasThreshold: v })}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 ${
+                  localSettings.gasThreshold === v
+                    ? 'bg-purple-500/10 border border-purple-500/30 text-purple-500'
+                    : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500'
+                }`}
+              >
+                {v} ppm
+              </button>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Target Temperature */}
+      <motion.div custom={5} variants={fadeUp}>
+        <SectionHeader title="Suhu Target Kipas" icon={Thermometer} color="orange" />
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+          <SliderSetting
+            label="Suhu Aktivasi Kipas"
+            value={localSettings.targetSuhu}
+            min={20} max={35} unit="°C" step={0.5}
+            onChange={v => setLocalSettings({ ...localSettings, targetSuhu: v })}
+          />
+        </div>
+      </motion.div>
+
+      {/* Notifications */}
+      <motion.div custom={6} variants={fadeUp}>
+        <SectionHeader title="Notifikasi" icon={Bell} color="orange" />
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 py-2">
+          <ToggleSetting
+            label="Alert Gas Berbahaya"
+            description="Notifikasi saat gas melebihi batas"
+            checked={settings.gasNotifications}
+            onChange={v => actions.updateSetting('gasNotifications', v)}
+          />
+          <ToggleSetting
+            label="Deteksi Gerakan"
+            description="Notifikasi saat motion sensor aktif"
+            checked={settings.motionNotifications}
+            onChange={v => actions.updateSetting('motionNotifications', v)}
+          />
+          <ToggleSetting
+            label="Daya Berlebih"
+            description={`Alert saat watt > ${settings.overloadLimit}W`}
+            checked={settings.overloadNotifications}
+            onChange={v => actions.updateSetting('overloadNotifications', v)}
+          />
+          <ToggleSetting
+            label="Notifikasi Browser"
+            description="Tampilkan notifikasi di browser"
+            checked={settings.notificationsEnabled}
+            onChange={v => actions.updateSetting('notificationsEnabled', v)}
+          />
+        </div>
+      </motion.div>
+
+      {/* OTA Update Section */}
+<motion.div custom={7} variants={fadeUp}>
+  <SectionHeader title="OTA Update" icon={Cpu} color="purple" />
+  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+    <p className="text-xs text-slate-500 mb-3">
+      Aktifkan mode OTA untuk upload firmware baru ke ESP32 via browser.
+    </p>
+    
+    {/* OTA Toggle */}
+    <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl mb-3">
+      <div className="flex items-center gap-2">
+        <div className={`w-2 h-2 rounded-full ${state.systemInfo?.otaActive ? 'bg-orange-400 animate-pulse' : 'bg-slate-400'}`} />
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+          Mode OTA: {state.systemInfo?.otaActive ? 'AKTIF' : 'NONAKTIF'}
+        </span>
+      </div>
+      <button
+        onClick={actions.toggleOTA}
+        className={`relative w-14 h-7 rounded-full transition-all active:scale-95 ${
+          state.systemInfo?.otaActive 
+            ? 'bg-gradient-to-r from-orange-500 to-red-500' 
+            : 'bg-slate-300 dark:bg-slate-600'
+        }`}
+      >
+        <motion.div
+          animate={{ x: state.systemInfo?.otaActive ? 28 : 2 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+          className="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow-md"
+        />
+      </button>
+    </div>
+
+    {/* IP ESP32 */}
+    {state.systemInfo?.otaActive && state.systemInfo?.espIP && (
+      <div className="p-3 bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/20 rounded-xl mb-3">
+        <div className="flex items-center gap-2 mb-1">
+          <Wifi size={14} className="text-green-500" />
+          <span className="text-xs font-semibold text-green-600 dark:text-green-400">ESP32 OTA Ready</span>
+        </div>
+        <p className="text-sm font-mono text-green-700 dark:text-green-300">
+          http://{state.systemInfo.espIP}/update
+        </p>
         <button
-          onClick={async () => {
-            const granted = await requestNotificationPermission();
-            if (granted) {
-              actions.addNotification({
-                type: 'success',
-                title: 'Notifications Enabled',
-                message: 'Browser notifications are now active',
-              });
-            }
-          }}
-          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-xl transition-all"
+          onClick={() => window.open(`http://${state.systemInfo.espIP}/update`, '_blank')}
+          className="mt-2 w-full py-2 bg-green-500 hover:bg-green-600 text-white text-xs font-semibold rounded-xl transition-all active:scale-95"
         >
-          {getNotificationPermission() === 'granted' ? 'Enabled' : 'Enable'}
+          Buka Halaman Upload Firmware
         </button>
       </div>
-    </div>
+    )}
 
-    {/* Motion Notifications */}
-    <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Motion Alerts</p>
-          <p className="text-xs text-slate-500">Get notified when motion is detected</p>
-        </div>
-        <Toggle
-          enabled={localSettings.motionNotifications !== false}
-          onChange={() => {
-            const newVal = localSettings.motionNotifications === false;
-            setLocalSettings({ ...localSettings, motionNotifications: newVal });
-            handleSave('motionNotifications', newVal);
-          }}
-          size="sm"
-        />
-      </div>
-    </div>
-
-    {/* Gas Notifications */}
-    <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Gas Alerts</p>
-          <p className="text-xs text-slate-500">Get notified about air quality issues</p>
-        </div>
-        <Toggle
-          enabled={localSettings.gasNotifications !== false}
-          onChange={() => {
-            const newVal = localSettings.gasNotifications === false;
-            setLocalSettings({ ...localSettings, gasNotifications: newVal });
-            handleSave('gasNotifications', newVal);
-          }}
-          size="sm"
-        />
-      </div>
-    </div>
-
-    {/* Overload Notifications */}
-    <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Overload Alerts</p>
-          <p className="text-xs text-slate-500">Get notified about power overload</p>
-        </div>
-        <Toggle
-          enabled={localSettings.overloadNotifications !== false}
-          onChange={() => {
-            const newVal = localSettings.overloadNotifications === false;
-            setLocalSettings({ ...localSettings, overloadNotifications: newVal });
-            handleSave('overloadNotifications', newVal);
-          }}
-          size="sm"
-        />
-      </div>
-    </div>
+    <p className="text-[10px] text-slate-400 text-center">
+      {state.systemInfo?.otaActive 
+        ? 'OTA aktif. Sensor berhenti membaca. Matikan OTA untuk kembali normal.' 
+        : 'Aktifkan OTA untuk upload firmware baru ke ESP32.'}
+    </p>
   </div>
-</div>
+</motion.div>
 
-            {/* OTA Update */}
-            <div className="p-4 bg-orange-50 dark:bg-orange-500/10 rounded-xl border border-orange-200 dark:border-orange-500/20">
-              <button
-                onClick={actions.triggerOTA}
-                className="w-full flex items-center justify-center gap-3 px-4 py-4 hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-all group rounded-lg"
-              >
-                <Cpu className="w-5 h-5 text-orange-500 group-hover:rotate-180 transition-transform duration-500" />
-                <div className="text-left">
-                  <p className="text-sm font-medium text-orange-600 dark:text-orange-400">
-                    Trigger OTA Update
-                  </p>
-                  <p className="text-[10px] text-orange-500 dark:text-orange-400/70">
-                    ESP32 will enter firmware update mode
-                  </p>
-                </div>
-              </button>
-            </div>
-          </div>
+      {/* Actions */}
+      <motion.div custom={7} variants={fadeUp} className="flex gap-2">
+        <button onClick={handleReset}
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl transition-all active:scale-95 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-500"
+        >
+          <RotateCcw size={14} />
+          Reset
+        </button>
+        <button onClick={handleSave}
+          className="flex-[2] flex items-center justify-center gap-2 py-3 rounded-2xl transition-all active:scale-95 text-xs font-semibold text-white"
+          style={{
+            background: saved ? 'rgba(52,211,153,0.2)' : 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',
+            border: saved ? '1px solid rgba(52,211,153,0.4)' : 'none',
+            color: saved ? '#34d399' : 'white',
+          }}
+        >
+          <Save size={14} />
+          {saved ? 'Tersimpan!' : 'Simpan Pengaturan'}
+        </button>
+      </motion.div>
+
+      {/* Footer */}
+      <motion.div custom={8} variants={fadeUp}>
+        <div className="text-center py-3">
+          <div className="text-xs text-slate-400 font-semibold">SmartKost v1.0.0</div>
+          <div className="text-[10px] text-slate-400 mt-0.5">Smart Home untuk Penghuni Kost</div>
         </div>
+      </motion.div>
 
-        {/* System Info + Schedule */}
-        <div className="space-y-4 lg:space-y-6">
-          {/* System Status */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="p-2 bg-blue-50 dark:bg-blue-500/10 rounded-lg">
-                <Server className="w-4 h-4 text-blue-500" />
-              </div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                System Info
-              </h3>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <Wifi
-                    className={`w-4 h-4 ${mqttStatus === "connected" ? "text-emerald-500" : "text-red-500"}`}
-                  />
-                  <span className="text-xs text-slate-600 dark:text-slate-400">
-                    MQTT Status
-                  </span>
-                </div>
-                <span
-                  className={`text-xs font-bold ${mqttStatus === "connected" ? "text-emerald-500" : "text-red-500"}`}
-                >
-                  {mqttStatus === "connected" ? "Connected" : "Offline"}
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-blue-500" />
-                  <span className="text-xs text-slate-600 dark:text-slate-400">
-                    Security
-                  </span>
-                </div>
-                <span className="text-xs font-bold text-emerald-500">
-                  Active
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                <span className="text-xs text-slate-600 dark:text-slate-400">
-                  Version
-                </span>
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  v1.0.0
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Schedule */}
-          <ScheduleControl />
-        </div>
-      </div>
-    </div>
+      <div className="h-2" />
+    </motion.div>
   );
+  
 }

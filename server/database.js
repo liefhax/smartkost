@@ -5,10 +5,9 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const db = new Database(path.join(__dirname, 'smartkost.db'));
 
-// Enable WAL mode for better performance
+// Enable WAL mode for better performance & ngurangin wear-out disk
 db.pragma('journal_mode = WAL');
 
-// Create tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS energy_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -18,6 +17,16 @@ db.exec(`
     ampere REAL NOT NULL,
     kwh REAL NOT NULL,
     cost_rupiah REAL NOT NULL
+  );
+
+  -- Tabel baru untuk rekapan harian (Biar load data di frontend ringan)
+  CREATE TABLE IF NOT EXISTS daily_energy_summary (
+    date TEXT PRIMARY KEY, -- Format: YYYY-MM-DD
+    total_kwh REAL DEFAULT 0,
+    total_cost REAL DEFAULT 0,
+    peak_watt REAL DEFAULT 0,
+    avg_watt REAL DEFAULT 0,
+    readings_count INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS schedules (
@@ -40,7 +49,6 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_schedules_active ON schedules(active);
 `);
 
-// Insert default settings if not exist
 const insertSetting = db.prepare(
   'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)'
 );

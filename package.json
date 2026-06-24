@@ -12,11 +12,13 @@
   "dependencies": {
     "@tailwindcss/forms": "^0.5.11",
     "date-fns": "^4.4.0",
+    "framer-motion": "^12.40.0",
     "lucide-react": "^1.18.0",
     "mqtt": "^5.15.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "react-router-dom": "^7.17.0"
+    "react-router-dom": "^7.17.0",
+    "recharts": "^3.8.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
